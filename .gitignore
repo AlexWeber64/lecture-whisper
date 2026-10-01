@@ -1,0 +1,29 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Personal settings: copy config.example.json to config.json
+config.json
+
+# Runtime files written by the watcher and dashboard
+*.log
+*.log.*
+status.json
+history.jsonl
+model_switch_request.json
+lid_action_backup.json
+*.tmp
+
+# Transcripts and recordings never belong in the repo
+*.txt
+!requirements.txt
+*.m4a
+*.mp3
+*.wav
+*.aac
+*.ogg
+
+# Local notes and tool settings
+openvino_setup_changelog.md
+.claude/

@@ -1,0 +1,24 @@
+{
+  "watch_folder": "C:\\Users\\you\\OneDrive\\Lectures\\Incoming",
+  "archive_folder": "C:\\Users\\you\\OneDrive\\Lectures\\Processed",
+  "transcript_folder": "C:\\Users\\you\\OneDrive\\Lectures\\Transcripts",
+  "scratch_folder": "C:\\LectureWhisper\\Scratch",
+  "failure_notice_folders": [
+    "C:\\Users\\you\\Desktop",
+    "C:\\Users\\you\\Downloads"
+  ],
+  "models": {
+    "large-v3": "C:\\WhisperModels\\large-v3-openvino",
+    "large-v3-turbo": "C:\\WhisperModels\\large-v3-turbo-openvino"
+  },
+  "classes": {
+    "CHEM101 - General Chemistry": {
+      "aliases": ["chem101", "chem 101", "chem-101", "chemistry", "^chem"],
+      "hotwords": "General Chemistry lecture. stoichiometry, molarity, Avogadro's number, electronegativity, Le Chatelier's principle, enthalpy, entropy, Gibbs free energy, titration, buffer, Lewis structure, VSEPR, orbital hybridization."
+    },
+    "HIST210 - Medieval Europe": {
+      "aliases": ["hist210", "hist 210", "hist-210", "medieval", "^hist"],
+      "hotwords": "Medieval Europe lecture. Charlemagne, Carolingian, Merovingian, feudalism, manorialism, vassal, fief, Investiture Controversy, Magna Carta, Plantagenet, Capetian, Hanseatic League, Black Death, Avignon Papacy, scholasticism."
+    }
+  }
+}

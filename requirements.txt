@@ -1,0 +1,21 @@
+# Python 3.13 (the optimum export step below does not work on 3.14 yet)
+
+# Transcription on the Intel GPU
+openvino==2026.3.0
+openvino-genai==2026.3.0.0
+openvino-tokenizers==2026.3.0.0
+numpy==2.4.6
+
+# Audio decoding and Silero VAD (only these parts of faster-whisper are used)
+faster-whisper==1.2.1
+
+# Folder watching
+watchdog==6.0.0
+
+# notes_pipeline.py (Claude + Notion)
+anthropic==0.122.0
+requests==2.34.2
+
+# One-time conversion of the Whisper models to OpenVINO format (optimum-cli)
+optimum-intel==2.1.0
+nncf==3.3.0
