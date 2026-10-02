@@ -1,5 +1,7 @@
 # Lecture Whisper
 
+[![pipeline status](https://gitlab.com/AlexWeber64/lecture-whisper/badges/main/pipeline.svg)](https://gitlab.com/AlexWeber64/lecture-whisper/-/pipelines)
+
 Record a lecture on your phone and put the phone away. By the time you're back at your laptop, a timestamped transcript is waiting, and study notes for it are on their way to Notion.
 
 Lecture Whisper is a hands-off pipeline for Windows that watches a OneDrive folder for new recordings and transcribes them **locally on an Intel Arc integrated GPU** with OpenAI's Whisper (large-v3) through OpenVINO. Along the way it strips out silence, feeds Whisper vocabulary specific to each course, catches and repairs Whisper's typical failure modes, keeps the laptop awake (even with the lid closed) until the job is done, and makes any failure impossible to miss. A small local dashboard shows what it's doing right now and every lecture it has transcribed so far.
@@ -151,8 +153,23 @@ That's roughly 7 to 10 times faster, with transcripts of the same quality on bot
 | `config.py` | Loads and checks `config.json` |
 | `config.example.json` | Template for your own `config.json` |
 | `requirements.txt` | Pinned Python dependencies |
+| `tests/` | Unit tests for the watcher's logic and the dashboard's endpoints |
+| `requirements-dev.txt`, `pyproject.toml` | Test and lint tools, and their settings |
+| `.gitlab-ci.yml` | The GitLab pipeline |
 
 The watcher also creates a few runtime files next to itself (`status.json`, `history.jsonl`, the log, and short-lived request and backup files). All of them are git-ignored.
+
+### Tests and CI
+
+Every merge request and every push to `main` runs a GitLab pipeline with three jobs: `ruff` linting, the test suite, and a check that no em dashes have crept into the repo. The tests cover course matching, runaway and skip detection, the repair pass's "is this retry better" rule, the progress and time-left math, when the dashboard offers the model switch, and the dashboard's safety rules (escaped output, transcript paths confined to their folder, and the JSON-only switch endpoint). The dashboard tests start the real HTTP server on a random local port.
+
+The GPU, OneDrive, and Windows-only pieces can't run on a Linux runner, so `tests/conftest.py` replaces those packages with stand-ins and points the config at a temporary folder. To run the same checks locally:
+
+```powershell
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.venv\Scripts\python.exe -m ruff check .
+.venv\Scripts\python.exe -m pytest
+```
 
 ## Setup
 
