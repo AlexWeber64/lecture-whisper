@@ -42,12 +42,13 @@ no-em-dashes:
     - |
       python - <<'EOF'
       import pathlib, sys
+      EM_DASH = chr(0x2014)  # spelled out, so this file doesn't contain one
       hits = [
           f"{path}:{number}"
           for path in sorted(pathlib.Path(".").rglob("*"))
           if path.is_file() and not {".git", ".cache"} & set(path.parts)
           for number, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1)
-          if "—" in line
+          if EM_DASH in line
       ]
       print("\n".join(hits) if hits else "No em dashes found.")
       sys.exit(1 if hits else 0)
