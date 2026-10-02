@@ -436,6 +436,72 @@ FAST_PROMPT_SEGMENTS = 3
 FAST_PROMPT_MAX_CHARS = 500
 
 
+# Seconds of speech (silence already trimmed) one ~30s Whisper window moves
+# through on average. Each window ends at its last complete segment and the
+# next one picks up there, so it falls a little short of 30s.
+# Measured on four lectures (2026-10-02): 25.09-25.68s on both models.
+# Rounded down, so the bar runs a little behind rather than ahead.
+SPEECH_S_PER_WINDOW = 25.0
+# The window count is only an estimate, so the bar holds here until the
+# transcript is actually done instead of claiming 100% early.
+MAX_ESTIMATED_PROGRESS = 0.99
+# How many windows the pace is timed over before an ETA is shown. Timing
+# starts once the first window is done, since that one also pays for model
+# loading and encoder warm-up.
+ETA_MIN_WINDOWS = 3
+
+
+class Progress:
+    """Live transcription progress for the dashboard, written to status.json
+    after every ~30s window. OpenVINO's streamer hands over each window's
+    text but not where in the audio it ended (timestamp tokens are stripped
+    before it's called), so position is estimated as windows done x
+    SPEECH_S_PER_WINDOW, starting from a known point: 0, or the exact seam
+    of a mid-run switch to FAST_MODEL. The ETA comes from this run's own
+    pace per window, since total run time varies a lot from one lecture to
+    the next (2-13 min for similar lengths in history.jsonl)."""
+
+    def __init__(self, file_name: str, started_at: str, total_s: float):
+        self.file_name = file_name
+        self.started_at = started_at
+        self.total_s = total_s
+
+    def start(self, model: str, from_s: float = 0.0) -> None:
+        # Pace is per model (turbo is much faster), so it restarts here.
+        self.model = model
+        self.from_s = from_s
+        self.windows = 0
+        self.first_window_at = None
+        self._write(eta_s=None)
+
+    def window_done(self) -> None:
+        """Called from inside the OpenVINO streamer callback, so it never
+        raises (same rationale as switch_requested())."""
+        try:
+            now = time.time()
+            self.windows += 1
+            if self.first_window_at is None:
+                self.first_window_at = now
+            eta_s = None
+            if self.windows > ETA_MIN_WINDOWS:
+                s_per_window = (now - self.first_window_at) / (self.windows - 1)
+                windows_left = max(0.0, self.total_s - self._done_s()) / SPEECH_S_PER_WINDOW
+                eta_s = round(windows_left * s_per_window)
+            self._write(eta_s)
+        except Exception:
+            pass
+
+    def _done_s(self) -> float:
+        return self.from_s + self.windows * SPEECH_S_PER_WINDOW
+
+    def _write(self, eta_s) -> None:
+        fraction = min(self._done_s() / self.total_s, MAX_ESTIMATED_PROGRESS) if self.total_s else 0.0
+        write_status(
+            "processing", file=self.file_name, stage="transcribing", started_at=self.started_at,
+            model=self.model, progress=round(fraction, 3), eta_s=eta_s,
+        )
+
+
 def _generate(model: str, audio: np.ndarray, streamer=None, **kwargs):
     return get_pipeline(model).generate(
         audio.tolist(),
@@ -567,16 +633,18 @@ def transcribe(wav_path: Path, out_txt: Path, file_name: str, started_at: str) -
 
     segments = []
     models_used = []
+    progress = Progress(file_name, started_at, trimmed_s)
     fast_from_s = 0.0 if switch_requested(file_name) else None  # None = turbo not needed
 
     if fast_from_s is None:
-        write_status("processing", file=file_name, stage="transcribing", started_at=started_at, model=DEFAULT_MODEL)
+        progress.start(DEFAULT_MODEL)
         switched = False
 
         def check_for_switch(_text):
             # Called by OpenVINO once per decoded ~30s window. STOP makes
             # generate() return early with the chunks finished so far.
             nonlocal switched
+            progress.window_done()
             if switch_requested(file_name):
                 switched = True
                 return ovg.StreamingStatus.STOP
@@ -603,13 +671,18 @@ def transcribe(wav_path: Path, out_txt: Path, file_name: str, started_at: str) -
         remainder = trimmed_audio[int(fast_from_s * SAMPLING_RATE):]
         remainder_s = len(remainder) / SAMPLING_RATE
         if fast_from_s == 0.0 or remainder_s >= MIN_FAST_REMAINDER_S:
-            write_status("processing", file=file_name, stage="transcribing", started_at=started_at, model=FAST_MODEL)
+            progress.start(FAST_MODEL, from_s=fast_from_s)
             logger.info("  Transcribing %.1f min of speech on %s...", remainder_s / 60, FAST_MODEL)
             prompt_kwargs = {}
             if segments:
                 prompt = " ".join(text.strip() for _, _, text in segments[-FAST_PROMPT_SEGMENTS:])
                 prompt_kwargs["initial_prompt"] = prompt[-FAST_PROMPT_MAX_CHARS:]
-            result = _generate(FAST_MODEL, remainder, **prompt_kwargs, **hotword_kwargs)
+
+            def track_progress(_text):
+                progress.window_done()
+                return ovg.StreamingStatus.RUNNING
+
+            result = _generate(FAST_MODEL, remainder, streamer=track_progress, **prompt_kwargs, **hotword_kwargs)
             segments += _segments(result, remainder_s, offset_s=fast_from_s)
             models_used.append(FAST_MODEL)
 
@@ -625,6 +698,9 @@ def transcribe(wav_path: Path, out_txt: Path, file_name: str, started_at: str) -
     }
     for problem, tries in attempts.items():  # without hotwords, some of these are duplicates
         attempts[problem] = [t for n, t in enumerate(tries) if t not in tries[:n]]
+    if any(_problem(s) for s in segments):
+        # Its own stage, so the dashboard doesn't sit at 99% through the retries.
+        write_status("processing", file=file_name, stage="repairing_segments", started_at=started_at, model=" -> ".join(models_used))
     segments = repair_segments(segments, trimmed_audio, attempts)
 
     with open(out_txt, "w", encoding="utf-8") as f:
