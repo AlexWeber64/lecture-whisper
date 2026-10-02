@@ -1,0 +1,55 @@
+# Checks only. The watcher itself needs the laptop's Intel Arc GPU and its
+# OneDrive folders, so it never runs here; the tests swap the GPU-only
+# packages for stand-ins (see tests/conftest.py).
+
+# Run for merge requests and the default branch, without a duplicate
+# branch pipeline for every push to an open merge request.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+default:
+  image: python:3.13-slim
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+.python:
+  cache:
+    key:
+      files: [requirements-dev.txt]
+    paths: [.cache/pip]
+  before_script:
+    - pip install --quiet -r requirements-dev.txt
+
+lint:
+  extends: .python
+  script:
+    - ruff check .
+
+tests:
+  extends: .python
+  script:
+    - pytest -q
+
+# Published text and code use commas, colons, or parentheses instead.
+no-em-dashes:
+  script:
+    - |
+      python - <<'EOF'
+      import pathlib, sys
+      EM_DASH = chr(0x2014)  # spelled out, so this file doesn't contain one
+      hits = [
+          f"{path}:{number}"
+          for path in sorted(pathlib.Path(".").rglob("*"))
+          if path.is_file() and not {".git", ".cache"} & set(path.parts)
+          for number, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1)
+          if EM_DASH in line
+      ]
+      print("\n".join(hits) if hits else "No em dashes found.")
+      sys.exit(1 if hits else 0)
+      EOF

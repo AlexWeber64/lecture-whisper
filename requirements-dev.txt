@@ -1,0 +1,5 @@
+# Lint and tests only (used by CI). The tests don't need the GPU packages
+# in requirements.txt; see tests/conftest.py.
+numpy==2.4.6
+pytest==9.1.1
+ruff==0.16.10

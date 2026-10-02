@@ -18,6 +18,7 @@ lid_action_backup.json
 # Transcripts and recordings never belong in the repo
 *.txt
 !requirements.txt
+!requirements-dev.txt
 *.m4a
 *.mp3
 *.wav
