@@ -7,8 +7,8 @@ Python, not just the project venv.
 
 Two tabs:
   - Live: current watcher state (idle/processing/error), polled from
-    status.json, plus a "Switch to large-v3-turbo" button while a
-    recording is being transcribed.
+    status.json, plus a progress bar with time left and a "Switch to
+    large-v3-turbo" button while a recording is being transcribed.
   - History: every completed run, read from history.jsonl (append-only,
     one JSON record per file), with client-side filtering by class/time,
     and a link to view each transcript's full text.
@@ -104,6 +104,12 @@ PAGE = """<!DOCTYPE html>
   .label { color: #8890a0; }
   .value { color: #e8e8ea; font-weight: 500; text-align: right; max-width: 60%; overflow-wrap: anywhere; }
   .elapsed { font-variant-numeric: tabular-nums; }
+  .progress { margin-bottom: 1rem; }
+  .progress[hidden] { display: none; }
+  .progress-track { height: 0.55rem; background: #262a33; border-radius: 999px; overflow: hidden; }
+  .progress-fill { height: 100%; width: 0; background: #6ea8f2; border-radius: 999px; transition: width 0.8s ease-out; }
+  .progress-text { display: flex; justify-content: space-between; margin-top: 0.45rem; font-size: 0.85rem; color: #8890a0; font-variant-numeric: tabular-nums; }
+  .progress-text strong { color: #e8e8ea; font-weight: 600; }
   .updated { margin-top: 1.5rem; font-size: 0.8rem; color: #5a6070; text-align: right; }
   .controls { margin-top: 1.25rem; display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; }
   .controls button {
@@ -147,6 +153,10 @@ PAGE = """<!DOCTYPE html>
 
     <div id="tab-live" class="tab-panel active">
       <div id="badge" class="badge unknown"><span class="dot"></span><span id="badge-text">Loading...</span></div>
+      <div id="progress" class="progress" hidden>
+        <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="progress-text"><strong id="progress-pct"></strong><span id="progress-eta"></span></div>
+      </div>
       <div id="rows"></div>
       <div class="controls" id="controls"></div>
       <div class="updated" id="updated"></div>
@@ -194,6 +204,29 @@ function fmtElapsed(iso) {
   return m + "m " + String(s).padStart(2, "0") + "s";
 }
 
+function fmtEta(secs) {
+  if (secs == null) return 'Estimating time left...';
+  if (secs < 60) return 'Under a minute left';
+  return 'About ' + Math.round(secs / 60) + ' min left';
+}
+
+// Updates the bar in place (not via rows.innerHTML) so its width animates
+// between polls instead of jumping.
+function renderProgress(data) {
+  const box = document.getElementById('progress');
+  const fill = document.getElementById('progress-fill');
+  const show = data.state === 'processing' && data.stage === 'transcribing' && data.progress != null;
+  box.hidden = !show;
+  if (!show) {
+    fill.style.width = '0';  // so the next recording's bar starts empty
+    return;
+  }
+  const pct = Math.floor(data.progress * 100);
+  fill.style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = pct + '%';
+  document.getElementById('progress-eta').textContent = fmtEta(data.eta_s);
+}
+
 function row(label, value) {
   return '<div class="row"><span class="label">' + label + '</span><span class="value">' + value + '</span></div>';
 }
@@ -219,6 +252,7 @@ async function pollLive() {
 
   const state = data.state || 'unknown';
   badge.className = 'badge ' + state;
+  renderProgress(data);
 
   let html = '';
   let controlsHtml = '';
